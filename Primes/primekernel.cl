@@ -5,36 +5,19 @@
 __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in, __global const uint *R_in, __global uint *is_prime) {
 
 	uint R[N_Size];
-	uint E[N_Size];
-	uint M[N_Size];
-	uint Mshifted[N_Size];
 
 	// Get the index of the current element to be processed
 	const int offset = get_global_id(0) * N_Size;
-	// M = M_in, Mshifted = M << clz(M[n-1]), E = M_in - 1, R = R_in
-	{
-		uint cy = 1;
-#pragma unroll 1
-		for (int i = 0; i < N_Size; ++i)
-		{
-			M[i] = M_in[offset + i];
-			E[i] = M[i] - cy;
-			if (E[i] <= M[i]) cy = 0;
-			R[i] = R_in[offset + i];
-		}
+	__global const uint* M = &M_in[offset];
+	const uint shift = clz(M[N_Size - 1]);
 
-		uint shift = clz(M[N_Size - 1]);
-		Mshifted[0] = 0;
-#pragma unroll 1
-		for (int i = 0; i < N_Size - 1; ++i)
-		{
-			Mshifted[i] |= M[i] << shift;
-			Mshifted[i + 1] = M[i] >> (32 - shift);
-		}
+	for (int i = 0; i < N_Size; ++i)
+	{
+		R[i] = R_in[offset + i];
 	}
 
 	const uint highbit = ((uint)1) << 31;
-	uint startbit = highbit >> clz(E[N_Size - 1]);
+	uint startbit = highbit >> shift;
 
 	const uint mi = Mi_in[get_global_id(0)];
 
@@ -44,6 +27,8 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 	{
 		uint bit = startbit;
 		startbit = highbit;
+		uint E = M[en];
+		if (en == 0) E--;
 
 		do
 		{
@@ -143,10 +128,12 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 					if (cy != 0)
 					{
 						cy = 0;
+						uint last_shifted = 0;
 						for (int i = 0; i < N_Size; ++i)
 						{
 							uint a = R[i];
-							uint b = Mshifted[i];
+							uint b = (M[i] << shift) | last_shifted;
+							last_shifted = M[i] >> (32 - shift);
 							b += cy;
 							cy = (b < cy);
 							cy += (a < b);
@@ -156,7 +143,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 				}
 			}
 
-			if (E[en] & bit)
+			if (E & bit)
 			{
 				//mp_limb_t carry = mpn_lshift(rp, rp, mn, 1);
 				uint carry = 0;
@@ -171,10 +158,12 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 				{
 					//carry -= mpn_sub_n(rp, rp, mshifted, mn);
 					uint cy = 0;
+					uint last_shifted = 0;
 					for (int i = 0; i < N_Size; ++i)
 					{
 						uint a = R[i];
-						uint b = Mshifted[i];
+						uint b = (M[i] << shift) | last_shifted;
+						last_shifted = M[i] >> (32 - shift);
 						b += cy;
 						cy = (b < cy);
 						cy += (a < b);
@@ -231,10 +220,12 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 			if (cy != 0)
 			{
 				cy = 0;
+				uint last_shifted = 0;
 				for (int i = 0; i < N_Size; ++i)
 				{
 					uint a = R[i];
-					uint b = Mshifted[i];
+					uint b = (M[i] << shift) | last_shifted;
+					last_shifted = M[i] >> (32 - shift);
 					b += cy;
 					cy = (b < cy);
 					cy += (a < b);

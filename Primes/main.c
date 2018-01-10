@@ -5,12 +5,20 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include <Windows.h>
+
 #include "mini-gmp.h"
 
-void primeTest(int N_Size, int LIST_SIZE, const uint32_t* M, uint32_t* is_prime);
+struct PrimeTestCxt* primeTestInit();
+void primeTestTerm(struct PrimeTestCxt* cxt);
+
+void primeTest(struct PrimeTestCxt* cxt, int N_Size, int LIST_SIZE, const uint32_t* M, uint32_t* is_prime);
 
 int main(void) {
 	printf("started running\n");
+
+	struct PrimeTestCxt* cxt = primeTestInit();
+	printf("initialized\n");
 
 	// Create the two input vectors
 	int i;
@@ -27,11 +35,33 @@ int main(void) {
 	}
 
 	uint32_t *is_prime = (uint32_t*)malloc(sizeof(uint32_t)*LIST_SIZE);
-	primeTest(N_Size, LIST_SIZE, M, is_prime);
+
+	LARGE_INTEGER startTime;
+	QueryPerformanceCounter(&startTime);
+
+	primeTest(cxt, N_Size, 1, M, is_prime);
+
+	LARGE_INTEGER endTime;
+	QueryPerformanceCounter(&endTime);
+
+	printf("Build time: %lld\n", endTime.QuadPart - startTime.QuadPart);
+
+	startTime;
+	QueryPerformanceCounter(&startTime);
+
+	primeTest(cxt, N_Size, LIST_SIZE, M, is_prime);
+
+	endTime;
+	QueryPerformanceCounter(&endTime);
+
+	printf("Time: %lld\n", endTime.QuadPart - startTime.QuadPart);
 
 	// Display the result to the screen
 	for (i = 0; i < LIST_SIZE; i++)
 		if (is_prime[i]) printf("%d\n", M[i*N_Size]);
+
+	primeTestTerm(cxt);
+	printf("terminated\n");
 
 	free(M);
 	free(is_prime);

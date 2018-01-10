@@ -100,11 +100,29 @@ static void setup_fermat(int N_Size, int num, const mp_limb_t* M, mp_limb_t* MI,
 #define DPRINTF(fmt, ...) do { } while(0)
 #endif
 
-void primeTest(int N_Size, int LIST_SIZE, const cl_uint* M, cl_uint* is_prime)
+typedef struct PrimeTestCxt
 {
-	cl_uint *R = (cl_uint*)malloc(sizeof(cl_uint)*(N_Size*LIST_SIZE + 1));
-	cl_uint *MI = (cl_uint*)malloc(sizeof(cl_uint)*LIST_SIZE);
+	cl_device_id device_id;
+	cl_command_queue command_queue;
 
+	cl_mem m_mem_obj;
+	cl_mem mi_mem_obj;
+	cl_mem r_mem_obj;
+	cl_mem is_prime_mem_obj;
+
+	cl_context context;
+	cl_program program;
+	cl_kernel kernel;
+
+	int N_Size;
+	cl_uint *R;
+	cl_uint *MI;
+} PrimeTestCxt;
+
+#define MAX_JOB_SIZE 1024
+
+PrimeTestCxt* primeTestInit()
+{
 	// Load the kernel source code into the array source_str
 	FILE *fp;
 	char *source_str;
@@ -119,8 +137,11 @@ void primeTest(int N_Size, int LIST_SIZE, const cl_uint* M, cl_uint* is_prime)
 	source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
 	fclose(fp);
 	printf("kernel loading done\n");
+
+	PrimeTestCxt* cxt = (PrimeTestCxt*)malloc(sizeof(PrimeTestCxt));
+	cxt->device_id = NULL;
+
 	// Get platform and device information
-	cl_device_id device_id = NULL;
 	cl_uint ret_num_platforms;
 
 	cl_int ret = clGetPlatformIDs(0, NULL, &ret_num_platforms);
@@ -131,112 +152,149 @@ void primeTest(int N_Size, int LIST_SIZE, const cl_uint* M, cl_uint* is_prime)
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
 	ret = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_ALL, 1,
-						 &device_id, NULL);
-
-	setup_fermat(N_Size, LIST_SIZE, M, MI, R);
+						 &cxt->device_id, NULL);
 
 	// Create an OpenCL context
-	cl_context context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+	cxt->context = clCreateContext(NULL, 1, &cxt->device_id, NULL, NULL, &ret);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
 	// Create a command queue
-	cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+	cxt->command_queue = clCreateCommandQueue(cxt->context, cxt->device_id, 0, &ret);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
 	// Create memory buffers on the device for each vector 
-	cl_mem m_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
-									  LIST_SIZE * N_Size * sizeof(cl_uint), NULL, &ret);
-	cl_mem mi_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
-									   LIST_SIZE * sizeof(cl_uint), NULL, &ret);
-	cl_mem r_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE,
-									  LIST_SIZE * N_Size * sizeof(cl_uint), NULL, &ret);
-	cl_mem is_prime_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-											 LIST_SIZE * sizeof(cl_uint), NULL, &ret);
+	cxt->m_mem_obj = clCreateBuffer(cxt->context, CL_MEM_READ_ONLY,
+									  MAX_JOB_SIZE * MAX_N_SIZE * sizeof(cl_uint), NULL, &ret);
+	cxt->mi_mem_obj = clCreateBuffer(cxt->context, CL_MEM_READ_ONLY,
+									 MAX_JOB_SIZE * sizeof(cl_uint), NULL, &ret);
+	cxt->r_mem_obj = clCreateBuffer(cxt->context, CL_MEM_READ_WRITE,
+									MAX_JOB_SIZE * MAX_N_SIZE * sizeof(cl_uint), NULL, &ret);
+	cxt->is_prime_mem_obj = clCreateBuffer(cxt->context, CL_MEM_WRITE_ONLY,
+										   MAX_JOB_SIZE * sizeof(cl_uint), NULL, &ret);
 
-	// Copy the lists A and B to their respective memory buffers
-	ret = clEnqueueWriteBuffer(command_queue, m_mem_obj, CL_TRUE, 0,
-							   LIST_SIZE * N_Size * sizeof(cl_uint), M, 0, NULL, NULL);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
-
-	ret = clEnqueueWriteBuffer(command_queue, mi_mem_obj, CL_TRUE, 0,
-							   LIST_SIZE * sizeof(cl_uint), MI, 0, NULL, NULL);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
-
-	ret = clEnqueueWriteBuffer(command_queue, r_mem_obj, CL_TRUE, 0,
-							   LIST_SIZE * N_Size * sizeof(cl_uint), R, 0, NULL, NULL);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
-
-	DPRINTF("before building\n");
 	// Create a program from the kernel source
-	cl_program program = clCreateProgramWithSource(context, 1,
+	cxt->program = clCreateProgramWithSource(cxt->context, 1,
 		(const char **)&source_str, (const size_t *)&source_size, &ret);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
+
+	cxt->R = (cl_uint*)malloc(sizeof(cl_uint)*(MAX_N_SIZE*MAX_JOB_SIZE + 1));
+	cxt->MI = (cl_uint*)malloc(sizeof(cl_uint)*MAX_JOB_SIZE);
+	cxt->N_Size = 0;
+
+	return cxt;
+}
+
+static void primeTestBuild(PrimeTestCxt* cxt, int N_Size)
+{
+	if (cxt->N_Size != 0)
+	{
+		clReleaseKernel(cxt->kernel);
+	}
 
 	// Build the program
 	char options[1024];
 	sprintf(options, "-DN_Size=%d", N_Size);
-	ret = clBuildProgram(program, 1, &device_id, options, NULL, NULL);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
+	cl_int ret = clBuildProgram(cxt->program, 1, &cxt->device_id, options, NULL, NULL);
 
-	char str[4096];
-	size_t str_len;
-	clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(str), str, &str_len);
-	str[max(str_len, 1023)] = 0;
-	printf("Build Log: %s\n", str);
+	if (ret != CL_SUCCESS)
+	{
+		printf("Build program returned %d\n", ret);
 
-	DPRINTF("after building\n");
+		char str[4096];
+		size_t str_len;
+		clGetProgramBuildInfo(cxt->program, cxt->device_id, CL_PROGRAM_BUILD_LOG, sizeof(str), str, &str_len);
+		str[max(str_len, 1023)] = 0;
+		printf("Build Log: %s\n", str);
+		abort();
+	}
+
 	// Create the OpenCL kernel
-	cl_kernel kernel = clCreateKernel(program, "fermat_test", &ret);
+	cxt->kernel = clCreateKernel(cxt->program, "fermat_test", &ret);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
 	// Set the arguments of the kernel
-	ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&m_mem_obj);
+	ret = clSetKernelArg(cxt->kernel, 0, sizeof(cl_mem), (void *)&cxt->m_mem_obj);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
-	ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&mi_mem_obj);
+	ret = clSetKernelArg(cxt->kernel, 1, sizeof(cl_mem), (void *)&cxt->mi_mem_obj);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
-	ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&r_mem_obj);
+	ret = clSetKernelArg(cxt->kernel, 2, sizeof(cl_mem), (void *)&cxt->r_mem_obj);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
-	ret = clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&is_prime_mem_obj);
+	ret = clSetKernelArg(cxt->kernel, 3, sizeof(cl_mem), (void *)&cxt->is_prime_mem_obj);
 	DPRINTF("ret at %d is %d\n", __LINE__, ret);
 
-	//added this to fix garbage output problem
-	//ret = clSetKernelArg(kernel, 3, sizeof(int), &LIST_SIZE);
+	cxt->N_Size = N_Size;
+}
 
-	DPRINTF("before execution\n");
-	// Execute the OpenCL kernel on the list
-	size_t global_item_size = LIST_SIZE; // Process the entire lists
-	size_t local_item_size = 32; // Divide work items into groups of 64
-	cl_event complete_event;
-	ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL,
-								 &global_item_size, &local_item_size, 0, NULL, &complete_event);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
-	ret = clWaitForEvents(1, &complete_event);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
+void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const cl_uint* M, cl_uint* is_prime)
+{
+	if (N_Size != cxt->N_Size)
+	{
+		primeTestBuild(cxt, N_Size);
+	}
 
-	DPRINTF("after execution\n");
-	// Read the memory buffer C on the device to the local variable C
-	ret = clEnqueueReadBuffer(command_queue, r_mem_obj, CL_TRUE, 0,
-							  LIST_SIZE * sizeof(cl_uint) * N_Size, R, 0, NULL, NULL);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
-	ret = clEnqueueReadBuffer(command_queue, is_prime_mem_obj, CL_TRUE, 0,
-							  LIST_SIZE * sizeof(cl_uint), is_prime, 0, NULL, NULL);
-	DPRINTF("ret at %d is %d\n", __LINE__, ret);
-	DPRINTF("after copying\n");
+	while (listSize > 0)
+	{
+		int jobSize = min(MAX_JOB_SIZE, listSize);
+		listSize -= jobSize;
 
-	// Clean up
-	ret = clFlush(command_queue);
-	ret = clFinish(command_queue);
-	ret = clReleaseKernel(kernel);
-	ret = clReleaseProgram(program);
-	ret = clReleaseMemObject(m_mem_obj);
-	ret = clReleaseMemObject(mi_mem_obj);
-	ret = clReleaseMemObject(r_mem_obj);
-	ret = clReleaseMemObject(is_prime_mem_obj);
-	ret = clReleaseCommandQueue(command_queue);
-	ret = clReleaseContext(context);
-	free(R);
-	free(MI);
+		setup_fermat(N_Size, jobSize, M, cxt->MI, cxt->R);
+
+		// Copy the lists A and B to their respective memory buffers
+		cl_int ret = clEnqueueWriteBuffer(cxt->command_queue, cxt->m_mem_obj, CL_TRUE, 0,
+										  jobSize * N_Size * sizeof(cl_uint), M, 0, NULL, NULL);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+
+		ret = clEnqueueWriteBuffer(cxt->command_queue, cxt->mi_mem_obj, CL_TRUE, 0,
+								   jobSize * sizeof(cl_uint), cxt->MI, 0, NULL, NULL);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+
+		ret = clEnqueueWriteBuffer(cxt->command_queue, cxt->r_mem_obj, CL_TRUE, 0,
+								   jobSize * N_Size * sizeof(cl_uint), cxt->R, 0, NULL, NULL);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+
+		DPRINTF("before building\n");
+
+		DPRINTF("after building\n");
+
+		DPRINTF("before execution\n");
+		// Execute the OpenCL kernel on the list
+		size_t global_item_size = jobSize; // Process the entire lists
+		cl_event complete_event;
+		ret = clEnqueueNDRangeKernel(cxt->command_queue, cxt->kernel, 1, NULL,
+									 &global_item_size, NULL, 0, NULL, &complete_event);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+		ret = clWaitForEvents(1, &complete_event);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+
+		DPRINTF("after execution\n");
+		// Read the memory buffer C on the device to the local variable C
+		ret = clEnqueueReadBuffer(cxt->command_queue, cxt->r_mem_obj, CL_TRUE, 0,
+								  jobSize * sizeof(cl_uint) * N_Size, cxt->R, 0, NULL, NULL);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+		ret = clEnqueueReadBuffer(cxt->command_queue, cxt->is_prime_mem_obj, CL_TRUE, 0,
+								  jobSize * sizeof(cl_uint), is_prime, 0, NULL, NULL);
+		DPRINTF("ret at %d is %d\n", __LINE__, ret);
+		DPRINTF("after copying\n");
+
+		M += jobSize*N_Size;
+		is_prime += jobSize;
+	}
+}
+
+void primeTestTerm(PrimeTestCxt* cxt)
+{
+	clFlush(cxt->command_queue);
+	clFinish(cxt->command_queue);
+	clReleaseProgram(cxt->program);
+	clReleaseMemObject(cxt->m_mem_obj);
+	clReleaseMemObject(cxt->mi_mem_obj);
+	clReleaseMemObject(cxt->r_mem_obj);
+	clReleaseMemObject(cxt->is_prime_mem_obj);
+	clReleaseCommandQueue(cxt->command_queue);
+	clReleaseContext(cxt->context);
+	free(cxt->R);
+	free(cxt->MI);
 }

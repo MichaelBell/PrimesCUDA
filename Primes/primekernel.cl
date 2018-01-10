@@ -1,3 +1,5 @@
+#pragma OPENCL EXTENSION cl_nv_pragma_unroll : enable
+
 // Compute 2^(M-1) mod M
 // R is B^n * 2 % M
 __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in, __global uint *R_in, __global uint *is_prime) {
@@ -12,6 +14,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 	// M = M_in, Mshifted = M << clz(M[n-1]), E = M_in - 1, R = R_in
 	{
 		uint cy = 1;
+#pragma unroll 1
 		for (int i = 0; i < N_Size; ++i)
 		{
 			M[i] = M_in[offset + i];
@@ -22,6 +25,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 
 		uint shift = clz(M[N_Size - 1]);
 		Mshifted[0] = 0;
+#pragma unroll 1
 		for (int i = 0; i < N_Size - 1; ++i)
 		{
 			Mshifted[i] |= M[i] << shift;
@@ -35,6 +39,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 	const uint mi = Mi_in[get_global_id(0)];
 
 	int en = N_Size;
+#pragma unroll 1
 	while (en-- > 0)
 	{
 		uint bit = startbit;
@@ -61,6 +66,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 						T[N_Size - 1] = cy;
 					}
 
+#pragma unroll 1
 					for (int j = 2; j < N_Size; ++j)
 					{
 						uint cy = 0;
@@ -106,6 +112,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 
 				//if (mpn_redc_1(rp, pp, mp, mn, mi) != 0) 
 				//  mpn_sub_n(rp, rp, mshifted, n);
+#pragma unroll 1
 				for (int j = 0; j < N_Size; ++j)
 				{
 					uint cy = 0;
@@ -193,6 +200,7 @@ __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in,
 		}
 
 		// MPN_REDC_1(rp, tp, mp, mn, mi);
+#pragma unroll 1
 		for (int j = 0; j < N_Size; ++j)
 		{
 			uint cy = 0;

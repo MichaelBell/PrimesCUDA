@@ -151,9 +151,10 @@
   <ItemGroup>
     <ClCompile Include="main.c" />
     <ClCompile Include="mini-gmp.c" />
+    <ClCompile Include="primetest.c" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="program.cl" />
+    <None Include="primekernel.cl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mini-gmp.h" />

@@ -5,17 +5,18 @@
 __kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in, __global const uint *R_in, __global uint *is_prime) {
 
 	uint R[N_Size];
+	uint M[N_Size];
 
 	// Get the index of the current element to be processed
 	const int offset = get_global_id(0) * N_Size;
-	__global const uint* M = &M_in[offset];
-	const uint shift = clz(M[N_Size - 1]);
 
 	for (int i = 0; i < N_Size; ++i)
 	{
+		M[i] = M_in[offset + i];
 		R[i] = R_in[offset + i];
 	}
 
+	const uint shift = clz(M[N_Size - 1]);
 	const uint highbit = ((uint)1) << 31;
 	uint startbit = highbit >> shift;
 

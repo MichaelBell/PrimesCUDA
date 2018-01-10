@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include "mini-gmp.h"
+
 void primeTest(int N_Size, int LIST_SIZE, const uint32_t* M, uint32_t* is_prime);
 
 int main(void) {

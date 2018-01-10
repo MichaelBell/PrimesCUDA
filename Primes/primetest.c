@@ -4,17 +4,17 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include "prime-gmp.h"
+
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
 #else
 #include <CL/cl.h>
 #endif
 
-#include "mini-gmp.h"
+#define DEBUG 0
 
 #define MAX_SOURCE_SIZE (0x100000)
-
-#define GMP_NUMB_BITS 32
 
 const unsigned char  binvert_limb_table[128] = {
 	0x01, 0xAB, 0xCD, 0xB7, 0x39, 0xA3, 0xC5, 0xEF,
@@ -42,9 +42,9 @@ const unsigned char  binvert_limb_table[128] = {
     assert ((__n & 1) == 1);                                            \
                                                                         \
     __inv = binvert_limb_table[(__n/2) & 0x7F]; /*  8 */                \
-    if (GMP_NUMB_BITS > 8)   __inv = 2 * __inv - __inv * __inv * __n;   \
-    if (GMP_NUMB_BITS > 16)  __inv = 2 * __inv - __inv * __inv * __n;   \
-    if (GMP_NUMB_BITS > 32)  __inv = 2 * __inv - __inv * __inv * __n;   \
+    if (GMP_LIMB_BITS > 8)   __inv = 2 * __inv - __inv * __inv * __n;   \
+    if (GMP_LIMB_BITS > 16)  __inv = 2 * __inv - __inv * __inv * __n;   \
+    if (GMP_LIMB_BITS > 32)  __inv = 2 * __inv - __inv * __inv * __n;   \
                                                                         \
     assert ((__inv * __n) == 1);                        \
     (inv) = __inv;                                      \
@@ -52,7 +52,7 @@ const unsigned char  binvert_limb_table[128] = {
 
 #define MAX_N_SIZE 96
 
-void setup_fermat(int N_Size, int num, const mp_limb_t* M, mp_limb_t* MI, mp_limb_t* R)
+static void setup_fermat(int N_Size, int num, const mp_limb_t* M, mp_limb_t* MI, mp_limb_t* R)
 {
 	assert(N_Size <= MAX_N_SIZE);
 	for (int j = 0; j < num; ++j)
@@ -182,7 +182,7 @@ void primeTest(int N_Size, int LIST_SIZE, const cl_uint* M, cl_uint* is_prime)
 	size_t str_len;
 	clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(str), str, &str_len);
 	str[max(str_len, 1023)] = 0;
-	DPRINTF("Build Log: %s\n", str);
+	printf("Build Log: %s\n", str);
 
 	DPRINTF("after building\n");
 	// Create the OpenCL kernel

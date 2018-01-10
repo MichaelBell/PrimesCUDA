@@ -2,7 +2,7 @@
 
 // Compute 2^(M-1) mod M
 // R is B^n * 2 % M
-__kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in, __global uint *R_in, __global uint *is_prime) {
+__kernel void fermat_test(__global const uint *M_in, __global const uint *Mi_in, __global const uint *R_in, __global uint *is_prime) {
 
 	uint R[N_Size];
 	uint E[N_Size];

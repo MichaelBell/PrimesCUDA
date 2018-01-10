@@ -40,6 +40,7 @@ see https://www.gnu.org/licenses/.  */
 
 /* For size_t */
 #include <stddef.h>
+#include <stdint.h>
 
 #if defined (__cplusplus)
 extern "C" {
@@ -53,9 +54,9 @@ void mp_get_memory_functions (void *(**) (size_t),
 			      void *(**) (void *, size_t, size_t),
 			      void (**) (void *, size_t));
 
-typedef unsigned long mp_limb_t;
-typedef long mp_size_t;
-typedef unsigned long mp_bitcnt_t;
+typedef uint64_t mp_limb_t;
+typedef int32_t mp_size_t;
+typedef uint32_t mp_bitcnt_t;
 
 typedef mp_limb_t *mp_ptr;
 typedef const mp_limb_t *mp_srcptr;

@@ -18,14 +18,17 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mini-gmp.c">
+    <ClCompile Include="primetest.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="primetest.c">
+    <ClCompile Include="mini-gmp.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="prime-gmp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="mini-gmp.h">
       <Filter>Header Files</Filter>
     </ClInclude>

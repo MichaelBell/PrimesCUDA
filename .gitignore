@@ -4,3 +4,4 @@ Primes.VC.VC.opendb
 Primes/x64/Debug
 x64/Debug
 Primes/Primes.vcxproj.user
+*.nvact

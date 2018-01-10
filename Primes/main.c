@@ -22,7 +22,7 @@ int main(void) {
 
 	// Create the two input vectors
 	int i;
-	const int LIST_SIZE = 4096;
+	const int LIST_SIZE = 8192;
 	const int N_Size = 53;
 	uint32_t *M = (uint32_t*)malloc(sizeof(uint32_t)*N_Size*LIST_SIZE);
 	for (i = 0; i < LIST_SIZE; i++) {

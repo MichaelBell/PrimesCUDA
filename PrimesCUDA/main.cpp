@@ -22,7 +22,7 @@ int main(void) {
 
 	// Create the two input vectors
 	int i;
-	const int LIST_SIZE = 8192;
+	const int LIST_SIZE = 16384;
 	const int N_Size = 53;
 	uint32_t *M = (uint32_t*)malloc(sizeof(uint32_t)*N_Size*LIST_SIZE);
 	for (i = 0; i < LIST_SIZE; i++) {
@@ -37,21 +37,21 @@ int main(void) {
 	uint32_t *is_prime = (uint32_t*)malloc(sizeof(uint32_t)*LIST_SIZE);
 
 	LARGE_INTEGER startTime;
+	LARGE_INTEGER endTime;
+#if 1
 	QueryPerformanceCounter(&startTime);
 
 	primeTest(cxt, N_Size, 1, M, is_prime);
 
-	LARGE_INTEGER endTime;
 	QueryPerformanceCounter(&endTime);
 
 	printf("Build time: %lld\n", endTime.QuadPart - startTime.QuadPart);
+#endif
 
-	startTime;
 	QueryPerformanceCounter(&startTime);
 
 	primeTest(cxt, N_Size, LIST_SIZE, M, is_prime);
 
-	endTime;
 	QueryPerformanceCounter(&endTime);
 
 	printf("Time: %lld\n", endTime.QuadPart - startTime.QuadPart);

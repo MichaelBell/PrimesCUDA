@@ -1,8 +1,8 @@
 #pragma once
 
-typedef unsigned long mp_limb_t;
-typedef long mp_size_t;
-typedef unsigned long mp_bitcnt_t;
+typedef uint32_t mp_limb_t;
+typedef int32_t mp_size_t;
+typedef uint32_t mp_bitcnt_t;
 
 typedef mp_limb_t *mp_ptr;
 typedef const mp_limb_t *mp_srcptr;

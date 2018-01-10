@@ -1,7 +1,8 @@
-.vs/Primes/v14/.suo
-Primes.VC.db
-Primes.VC.VC.opendb
-Primes/x64/Debug
-x64/Debug
-Primes/Primes.vcxproj.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+PrimesCUDA/x64
+x64
+*.vcxproj.user
 *.nvact
+*.pdb

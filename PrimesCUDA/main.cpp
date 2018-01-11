@@ -21,8 +21,8 @@ int main(void) {
 	struct PrimeTestCxt* cxt = primeTestInit();
 	printf("initialized\n");
 
-	const int LIST_SIZE = 512;
-	const int N_Size = 53;
+	const int LIST_SIZE = 8192;
+	const int N_Size = 54;
 	uint32_t *M = (uint32_t*)malloc(sizeof(uint32_t)*N_Size*LIST_SIZE);
 	uint32_t *is_prime = (uint32_t*)malloc(sizeof(uint32_t)*LIST_SIZE);
 	std::mt19937 generator;
@@ -73,7 +73,7 @@ int main(void) {
 
 		printf("k: %d Time: %lld\n", k, endTime.QuadPart - startTime.QuadPart);
 
-		for (int j = 1; j < ((N_Size - 1) / 2); ++j)
+		for (int j = 1; j < (N_Size / 2); ++j)
 		{
 			z_m->_mp_d[j] = (mp_limb_t(M[j * 2 + 1]) << 32) + M[j * 2];
 		}

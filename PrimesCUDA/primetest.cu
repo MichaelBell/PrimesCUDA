@@ -362,8 +362,11 @@ typedef struct PrimeTestCxt
 	uint* r_mem_obj;
 	uint* is_prime_mem_obj;
 
+	cudaEvent_t cudaEvent;
+
 	uint *R;
 	uint *MI;
+	uint* is_prime;
 } PrimeTestCxt;
 
 PrimeTestCxt* primeTestInit()
@@ -378,15 +381,20 @@ PrimeTestCxt* primeTestInit()
 		return NULL;
 	}
 
+	cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+
 	// Create memory buffers on the device for each vector 
 	cudaStatus = cudaMalloc((void**)&cxt->m_mem_obj, MAX_JOB_SIZE * MAX_N_SIZE * sizeof(uint));
 	cudaStatus = cudaMalloc((void**)&cxt->mi_mem_obj, MAX_JOB_SIZE * sizeof(uint));
 	cudaStatus = cudaMalloc((void**)&cxt->r_mem_obj, MAX_JOB_SIZE * MAX_N_SIZE * sizeof(uint));
 	cudaStatus = cudaMalloc((void**)&cxt->is_prime_mem_obj, MAX_JOB_SIZE * sizeof(uint));
 
+	cudaStatus = cudaEventCreateWithFlags(&cxt->cudaEvent, cudaEventBlockingSync);
+
 	// Create buffers on host
-	cxt->R = (uint*)malloc(sizeof(uint)*(MAX_N_SIZE*MAX_JOB_SIZE + 1));
-	cxt->MI = (uint*)malloc(sizeof(uint)*MAX_JOB_SIZE);
+	cudaMallocHost((void**)&cxt->R, sizeof(uint)*(MAX_N_SIZE*MAX_JOB_SIZE + 1));
+	cudaMallocHost((void**)&cxt->MI, sizeof(uint)*MAX_JOB_SIZE);
+	cudaMallocHost((void**)&cxt->is_prime, sizeof(uint)*MAX_JOB_SIZE);
 
 	return cxt;
 }
@@ -402,6 +410,8 @@ void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const uint* M, uint*
 	}
 
 	int nextJobSize = min(MAX_JOB_SIZE, listSize);
+	int jobSize = 0;
+	int lastJobSize = 0;
 
 	if (nextJobSize > 0)
 	{
@@ -410,14 +420,16 @@ void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const uint* M, uint*
 
 	while (nextJobSize > 0)
 	{
-		int jobSize = nextJobSize;
+		lastJobSize = jobSize;
+		jobSize = nextJobSize;
 		listSize -= jobSize;
 		nextJobSize = min(MAX_JOB_SIZE, listSize);
 
 		// Copy the lists A and B to their respective memory buffers
-		cudaStatus = cudaMemcpy(cxt->mi_mem_obj, cxt->MI, jobSize * sizeof(uint), cudaMemcpyHostToDevice);
-		cudaStatus = cudaMemcpy(cxt->r_mem_obj, cxt->R, jobSize * N_Size * sizeof(uint), cudaMemcpyHostToDevice);
-		cudaStatus = cudaMemcpy(cxt->m_mem_obj, M, jobSize * N_Size * sizeof(uint), cudaMemcpyHostToDevice);
+		cudaStatus = cudaMemcpyAsync(cxt->mi_mem_obj, cxt->MI, jobSize * sizeof(uint), cudaMemcpyHostToDevice);
+		cudaStatus = cudaMemcpyAsync(cxt->r_mem_obj, cxt->R, jobSize * N_Size * sizeof(uint), cudaMemcpyHostToDevice);
+		cudaEventRecord(cxt->cudaEvent);
+		cudaStatus = cudaMemcpyAsync(cxt->m_mem_obj, M, jobSize * N_Size * sizeof(uint), cudaMemcpyHostToDevice);
 
 		int blockSize = 1;
 		int numBlocks = jobSize;
@@ -561,30 +573,42 @@ void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const uint* M, uint*
 		default: abort();
 		}
 		
+#if 0
 		// Check for any errors launching the kernel
 		cudaStatus = cudaGetLastError();
 		if (cudaStatus != cudaSuccess) {
 			printf("addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
 			return;
 		}
+#endif
+
+		cudaEventSynchronize(cxt->cudaEvent);
+
+		if (lastJobSize > 0)
+		{
+			memcpy(is_prime, cxt->is_prime, lastJobSize * sizeof(uint));
+			is_prime += lastJobSize;
+		}
 
 		if (nextJobSize > 0)
 		{
 			M += jobSize*N_Size;
 			setup_fermat(N_Size, nextJobSize, M, cxt->MI, cxt->R);
+
+			cudaStatus = cudaMemcpyAsync(cxt->is_prime, cxt->is_prime_mem_obj, jobSize * sizeof(uint), cudaMemcpyDeviceToHost);
 		}
+		else
+		{
+			// cudaDeviceSynchronize waits for the kernel to finish, and returns
+			// any errors encountered during the launch.
+			cudaStatus = cudaDeviceSynchronize();
+			if (cudaStatus != cudaSuccess) {
+				printf("cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
+				return;
+			}
 
-		// cudaDeviceSynchronize waits for the kernel to finish, and returns
-		// any errors encountered during the launch.
-		cudaStatus = cudaDeviceSynchronize();
-		if (cudaStatus != cudaSuccess) {
-			printf("cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
-			return;
+			cudaStatus = cudaMemcpy(is_prime, cxt->is_prime_mem_obj, jobSize * sizeof(uint), cudaMemcpyDeviceToHost);
 		}
-
-		cudaStatus = cudaMemcpy(is_prime, cxt->is_prime_mem_obj, jobSize * sizeof(uint), cudaMemcpyDeviceToHost);
-
-		is_prime += jobSize;
 	}
 }
 
@@ -595,8 +619,9 @@ void primeTestTerm(PrimeTestCxt* cxt)
 	cudaFree(cxt->r_mem_obj);
 	cudaFree(cxt->is_prime_mem_obj);
 
-	free(cxt->R);
-	free(cxt->MI);
+	cudaFreeHost(cxt->R);
+	cudaFreeHost(cxt->MI);
+	cudaFreeHost(cxt->is_prime);
 	free(cxt);
 
 	cudaDeviceReset();

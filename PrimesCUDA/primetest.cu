@@ -5,6 +5,11 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+
+#include <mutex>
+
 #include "prime-gmp.h"
 
 typedef uint32_t uint;
@@ -362,7 +367,10 @@ typedef struct PrimeTestCxt
 	uint* r_mem_obj;
 	uint* is_prime_mem_obj;
 
+	CUcontext cudaCxt;
 	cudaEvent_t cudaEvent;
+
+	std::mutex cudaMutex;
 
 	uint *R;
 	uint *MI;
@@ -373,15 +381,25 @@ PrimeTestCxt* primeTestInit()
 {
 	cudaError_t cudaStatus;
 
-	PrimeTestCxt* cxt = (PrimeTestCxt*)malloc(sizeof(PrimeTestCxt));
+	PrimeTestCxt* cxt = new PrimeTestCxt;
 
-	cudaStatus = cudaSetDevice(0);
-	if (cudaStatus != cudaSuccess) {
-		printf("cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-		return NULL;
+	int device;
+	CUresult cuResult;
+	cuResult = cuInit(0);
+	if (cuResult != CUDA_SUCCESS) {
+		printf("cuInit failed!");
+		abort();
 	}
-
-	cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+	cuResult = cuDeviceGet(&device, 0);
+	if (cuResult != CUDA_SUCCESS) {
+		printf("cuDeviceGet failed!");
+		abort();
+	}
+	cuResult = cuCtxCreate(&cxt->cudaCxt, CU_CTX_SCHED_BLOCKING_SYNC, device);
+	if (cuResult != CUDA_SUCCESS) {
+		printf("cuCtxCreate failed!");
+		abort();
+	}
 
 	// Create memory buffers on the device for each vector 
 	cudaStatus = cudaMalloc((void**)&cxt->m_mem_obj, MAX_JOB_SIZE * MAX_N_SIZE * sizeof(uint));
@@ -396,12 +414,22 @@ PrimeTestCxt* primeTestInit()
 	cudaMallocHost((void**)&cxt->MI, sizeof(uint)*MAX_JOB_SIZE);
 	cudaMallocHost((void**)&cxt->is_prime, sizeof(uint)*MAX_JOB_SIZE);
 
+	cuCtxPopCurrent(NULL);
+
 	return cxt;
 }
 
 void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const uint* M, uint* is_prime)
 {
+	std::lock_guard<std::mutex> lock(cxt->cudaMutex);
 	cudaError_t cudaStatus;
+	CUresult cuResult;
+
+	cuResult = cuCtxPushCurrent(cxt->cudaCxt);
+	if (cuResult != CUDA_SUCCESS) {
+		printf("cuCtxPushCurrent failed!");
+		abort();
+	}
 
 	if (N_Size < 3 || N_Size > MAX_N_SIZE)
 	{
@@ -573,16 +601,20 @@ void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const uint* M, uint*
 		default: abort();
 		}
 		
-#if 0
+#if 1
 		// Check for any errors launching the kernel
 		cudaStatus = cudaGetLastError();
 		if (cudaStatus != cudaSuccess) {
-			printf("addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-			return;
+			printf("Kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+			break;
 		}
 #endif
 
 		cudaEventSynchronize(cxt->cudaEvent);
+		if (cudaStatus != cudaSuccess) {
+			printf("Sync failed: %s\n", cudaGetErrorString(cudaStatus));
+			break;
+		}
 
 		if (lastJobSize > 0)
 		{
@@ -599,21 +631,28 @@ void primeTest(PrimeTestCxt* cxt, int N_Size, int listSize, const uint* M, uint*
 		}
 		else
 		{
-			// cudaDeviceSynchronize waits for the kernel to finish, and returns
-			// any errors encountered during the launch.
-			cudaStatus = cudaDeviceSynchronize();
-			if (cudaStatus != cudaSuccess) {
-				printf("cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
-				return;
+			cuResult = cuCtxSynchronize();
+			if (cuResult != CUDA_SUCCESS) {
+				printf("cuCtxSynchronize failed!");
 			}
 
 			cudaStatus = cudaMemcpy(is_prime, cxt->is_prime_mem_obj, jobSize * sizeof(uint), cudaMemcpyDeviceToHost);
+			if (cudaStatus != cudaSuccess) {
+				printf("Final memcpy failed: %s\n", cudaGetErrorString(cudaStatus));
+			}
 		}
+	}
+
+	cuResult = cuCtxPopCurrent(NULL);
+	if (cuResult != CUDA_SUCCESS) {
+		printf("cuCtxPopCurrent failed!");
+		abort();
 	}
 }
 
 void primeTestTerm(PrimeTestCxt* cxt)
 {
+	cuCtxPushCurrent(cxt->cudaCxt);
 	cudaFree(cxt->mi_mem_obj);
 	cudaFree(cxt->m_mem_obj);
 	cudaFree(cxt->r_mem_obj);
@@ -622,7 +661,9 @@ void primeTestTerm(PrimeTestCxt* cxt)
 	cudaFreeHost(cxt->R);
 	cudaFreeHost(cxt->MI);
 	cudaFreeHost(cxt->is_prime);
-	free(cxt);
+	delete cxt;
+
+	cuCtxDestroy(cxt->cudaCxt);
 
 	cudaDeviceReset();
 }

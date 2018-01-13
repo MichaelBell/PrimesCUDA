@@ -5,23 +5,30 @@
 #include <stdint.h>
 #include <assert.h>
 #include <random>
+#include <thread>
+#include <chrono>
 
 #include <Windows.h>
 
 #include "mini-gmp.h"
+
+#define SINGLE_CXT 0
 
 struct PrimeTestCxt* primeTestInit();
 void primeTestTerm(struct PrimeTestCxt* cxt);
 
 void primeTest(struct PrimeTestCxt* cxt, int N_Size, int LIST_SIZE, const uint32_t* M, uint32_t* is_prime);
 
-int main(void) {
-	printf("started running\n");
+void myThread(struct PrimeTestCxt* cxt)
+{
+#if !SINGLE_CXT
+	cxt = primeTestInit();
 
-	struct PrimeTestCxt* cxt = primeTestInit();
-	printf("initialized\n");
+	const int LIST_SIZE = 512;
+#else
+	const int LIST_SIZE = 2048;
+#endif
 
-	const int LIST_SIZE = 8192;
 	const int N_Size = 54;
 	uint32_t *M = (uint32_t*)malloc(sizeof(uint32_t)*N_Size*LIST_SIZE);
 	uint32_t *is_prime = (uint32_t*)malloc(sizeof(uint32_t)*LIST_SIZE);
@@ -38,7 +45,7 @@ int main(void) {
 	mpz_t z_ft_b;
 	mpz_init_set_ui(z_ft_b, 2);
 
-	while (k < (1 << 30))
+	while (k < (1 << 12))
 	{
 		for (int j = 1; j < N_Size; ++j)
 		{
@@ -55,15 +62,6 @@ int main(void) {
 
 		LARGE_INTEGER startTime;
 		LARGE_INTEGER endTime;
-#if 0
-		QueryPerformanceCounter(&startTime);
-
-		primeTest(cxt, N_Size, 1, M, is_prime);
-
-		QueryPerformanceCounter(&endTime);
-
-		printf("Build time: %lld\n", endTime.QuadPart - startTime.QuadPart);
-#endif
 
 		QueryPerformanceCounter(&startTime);
 
@@ -83,7 +81,7 @@ int main(void) {
 		}
 			
 		mp_limb_t high_m = mp_limb_t(M[1]) << 32;
-		for (uint32_t i = 0; i < LIST_SIZE; i++) {
+		for (uint32_t i = 0; i < LIST_SIZE; i+=3) {
 			z_m->_mp_d[0] = high_m + M[i*N_Size];
 
 			mpz_sub_ui(z_ft_n, z_m, 1);
@@ -102,10 +100,48 @@ int main(void) {
 #endif
 	}
 
-	primeTestTerm(cxt);
-	printf("terminated\n");
-
 	free(M);
 	free(is_prime);
+
+#if !SINGLE_CXT
+	primeTestTerm(cxt);
+#endif
+}
+
+int main(void) {
+	printf("started running\n");
+
+#if SINGLE_CXT
+	struct PrimeTestCxt* cxt = primeTestInit();
+	printf("initialized\n");
+#else
+	struct PrimeTestCxt* cxt = NULL;
+#endif
+
+	LARGE_INTEGER startTime;
+	LARGE_INTEGER endTime;
+
+	QueryPerformanceCounter(&startTime);
+
+	//std::this_thread::sleep_for(std::chrono::seconds(20));
+
+	std::thread first(myThread, cxt);
+	std::thread second(myThread, cxt);
+	std::thread third(myThread, cxt);
+	std::thread fourth(myThread, cxt);
+	first.join();
+	second.join();
+	third.join();
+	fourth.join();
+
+	QueryPerformanceCounter(&endTime);
+
+	printf("Total time: %lld\n", endTime.QuadPart - startTime.QuadPart);
+
+#if SINGLE_CXT
+	primeTestTerm(cxt);
+	printf("terminated\n");
+#endif
+
 	return 0;
 }

@@ -71,6 +71,16 @@ typedef struct
   mp_limb_t *_mp_d;		/* Pointer to the limbs.  */
 } __mpz_struct;
 
+struct gmp_div_inverse
+{
+	/* Normalization shift count. */
+	unsigned shift;
+	/* Normalized divisor (d0 unused for mpn_div_qr_1) */
+	mp_limb_t d1, d0;
+	/* Inverse, for 2/1 or 3/2. */
+	mp_limb_t di;
+};
+
 typedef __mpz_struct mpz_t[1];
 
 typedef __mpz_struct *mpz_ptr;
@@ -300,16 +310,6 @@ size_t mpz_out_str (FILE *, int, const mpz_t);
 
 void mpz_import (mpz_t, size_t, int, size_t, int, size_t, const void *);
 void *mpz_export (void *, size_t *, int, size_t, int, size_t, const mpz_t);
-
-struct gmp_div_inverse
-{
-	/* Normalization shift count. */
-	unsigned shift;
-	/* Normalized divisor (d0 unused for mpn_div_qr_1) */
-	mp_limb_t d1, d0;
-	/* Inverse, for 2/1 or 3/2. */
-	mp_limb_t di;
-};
 
 #if defined (__cplusplus)
 }

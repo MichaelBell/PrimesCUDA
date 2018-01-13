@@ -7,12 +7,13 @@
 #include <random>
 #include <thread>
 #include <chrono>
-
-#include <Windows.h>
+#include <climits>
 
 #include "mini-gmp.h"
 
 #define SINGLE_CXT 0
+
+using namespace std::chrono;
 
 struct PrimeTestCxt* primeTestInit();
 void primeTestTerm(struct PrimeTestCxt* cxt);
@@ -24,7 +25,7 @@ void myThread(struct PrimeTestCxt* cxt)
 #if !SINGLE_CXT
 	cxt = primeTestInit();
 
-	const int LIST_SIZE = 512;
+	const int LIST_SIZE = 1024;
 #else
 	const int LIST_SIZE = 2048;
 #endif
@@ -60,17 +61,18 @@ void myThread(struct PrimeTestCxt* cxt)
 		}
 		k += LIST_SIZE;
 
-		LARGE_INTEGER startTime;
-		LARGE_INTEGER endTime;
+		high_resolution_clock::time_point startTime;
+		high_resolution_clock::time_point endTime;
 
-		QueryPerformanceCounter(&startTime);
+		startTime = high_resolution_clock::now();
 
 		primeTest(cxt, N_Size, LIST_SIZE, M, is_prime);
 
-		QueryPerformanceCounter(&endTime);
+		endTime = high_resolution_clock::now();
 
-		printf("k: %d Time: %lld\n", k, endTime.QuadPart - startTime.QuadPart);
+		printf("k: %d Time: %lf\n", k, duration_cast<duration<double>>(endTime - startTime).count());
 
+#if 0
 		for (int j = 1; j < (N_Size / 2); ++j)
 		{
 			z_m->_mp_d[j] = (mp_limb_t(M[j * 2 + 1]) << 32) + M[j * 2];
@@ -98,6 +100,7 @@ void myThread(struct PrimeTestCxt* cxt)
 		for (int i = 0; i < LIST_SIZE; i++)
 			if (is_prime[i]) printf("%d\n", M[i*N_Size]);
 #endif
+#endif
 	}
 
 	free(M);
@@ -118,25 +121,28 @@ int main(void) {
 	struct PrimeTestCxt* cxt = NULL;
 #endif
 
-	LARGE_INTEGER startTime;
-	LARGE_INTEGER endTime;
+	high_resolution_clock::time_point startTime;
+	high_resolution_clock::time_point endTime;
 
-	QueryPerformanceCounter(&startTime);
+	startTime = high_resolution_clock::now();
+	endTime = high_resolution_clock::now();
+
+	startTime = high_resolution_clock::now();
 
 	//std::this_thread::sleep_for(std::chrono::seconds(20));
 
 	std::thread first(myThread, cxt);
 	std::thread second(myThread, cxt);
-	std::thread third(myThread, cxt);
-	std::thread fourth(myThread, cxt);
+//	std::thread third(myThread, cxt);
+//	std::thread fourth(myThread, cxt);
 	first.join();
 	second.join();
-	third.join();
-	fourth.join();
+//	third.join();
+//	fourth.join();
 
-	QueryPerformanceCounter(&endTime);
+	endTime = high_resolution_clock::now();
 
-	printf("Total time: %lld\n", endTime.QuadPart - startTime.QuadPart);
+	printf("Total time: %lf\n", duration_cast<duration<double>>(endTime - startTime).count());
 
 #if SINGLE_CXT
 	primeTestTerm(cxt);

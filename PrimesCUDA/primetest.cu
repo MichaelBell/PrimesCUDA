@@ -57,8 +57,6 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 			{
 				uint P[N_Size * 2];
 				//mpn_sqr(pp, rp, mn);
-				P[0] = R[0] * R[0];
-				P[1] = __umulhi(R[0], R[0]);
 				{
 					uint T[N_Size * 2];
 
@@ -88,6 +86,8 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 						T[N_Size + j - 2] = cy;
 					}
 
+					// Better not to include this into the next loop as doing it first
+					// avoids latency stalls.
 					for (int i = 0; i < N_Size; ++i)
 					{
 						P[2 * i] = R[i] * R[i];
@@ -95,22 +95,19 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 					}
 
 					uint cy = 0;
-					for (int i = 0; i < N_Size * 2 - 2; ++i)
+					for (int i = 0; i < N_Size - 1; ++i)
 					{
-						uint t = T[i] & highbit;
-						T[i] <<= 1;
-						T[i] |= cy;
-						cy = t >> 31;
-					}
-					P[2 * N_Size - 1] += cy;
+						uint t = T[2 * i] & highbit;
+						ulong a = ulong(P[2 * i + 1]) + cy;
+						a += T[2 * i] << 1;
+						P[2 * i + 1] = uint(a);
+						cy = (t >> 31) + uint(a >> 32);
 
-					cy = 0;
-					for (int i = 0; i < N_Size * 2 - 2; ++i)
-					{
-						ulong a = ulong(P[i + 1]) + cy;
-						a += T[i];
-						P[i + 1] = uint(a);
-						cy = uint(a >> 32);
+						t = T[2 * i + 1] & highbit;
+						a = ulong(P[2 * i + 2]) + cy;
+						a += T[2 * i + 1] << 1;
+						P[2 * i + 2] = uint(a);
+						cy = (t >> 31) + uint(a >> 32);
 					}
 					P[2 * N_Size - 1] += cy;
 				}

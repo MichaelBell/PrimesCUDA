@@ -25,7 +25,7 @@ void myThread(struct PrimeTestCxt* cxt)
 #if !SINGLE_CXT
 	cxt = primeTestInit();
 
-	const int LIST_SIZE = 1024;
+	const int LIST_SIZE = 2048;
 #else
 	const int LIST_SIZE = 2048;
 #endif
@@ -46,7 +46,7 @@ void myThread(struct PrimeTestCxt* cxt)
 	mpz_t z_ft_b;
 	mpz_init_set_ui(z_ft_b, 2);
 
-	while (k < (1 << 12))
+	while (k < (1 << 13))
 	{
 		for (int j = 1; j < N_Size; ++j)
 		{

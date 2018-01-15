@@ -59,6 +59,8 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
+      <GenerateLineInfo>true</GenerateLineInfo>
+      <CodeGeneration>compute_52,sm_52</CodeGeneration>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -84,6 +86,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <AdditionalOptions>--default-stream per-thread %(AdditionalOptions)</AdditionalOptions>
       <CodeGeneration>compute_52,sm_52</CodeGeneration>
+      <GenerateLineInfo>true</GenerateLineInfo>
     </CudaCompile>
     <CudaLink>
       <Optimization>O3</Optimization>

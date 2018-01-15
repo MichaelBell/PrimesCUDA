@@ -58,7 +58,7 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 				uint P[N_Size * 2];
 				//mpn_sqr(pp, rp, mn);
 				{
-					uint T[N_Size * 2];
+					uint T[(N_Size - 1) * 2];
 
 					{
 						uint cy = 0;

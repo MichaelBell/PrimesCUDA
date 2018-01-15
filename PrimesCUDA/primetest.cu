@@ -144,17 +144,16 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 
 					if (cy != 0)
 					{
-						cy = 0;
+						int32_t borrow = 0;
 						uint last_shifted = 0;
 						for (int i = 0; i < N_Size; ++i)
 						{
-							uint a = R[i];
+							int64_t a = R[i];
 							uint b = (M[i] << shift) | last_shifted;
 							last_shifted = M[i] >> (32 - shift);
-							b += cy;
-							cy = (b < cy);
-							cy += (a < b);
-							R[i] = a - b;
+							a = a - int64_t(b) + borrow;
+							R[i] = uint(a);
+							borrow = int32_t(a >> 32);
 						}
 					}
 				}
@@ -174,19 +173,18 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 				while (carry)
 				{
 					//carry -= mpn_sub_n(rp, rp, mshifted, mn);
-					uint cy = 0;
+					int32_t borrow = 0;
 					uint last_shifted = 0;
 					for (int i = 0; i < N_Size; ++i)
 					{
-						uint a = R[i];
+						int64_t a = R[i];
 						uint b = (M[i] << shift) | last_shifted;
 						last_shifted = M[i] >> (32 - shift);
-						b += cy;
-						cy = (b < cy);
-						cy += (a < b);
-						R[i] = a - b;
+						a = a - int64_t(b) + borrow;
+						R[i] = uint(a);
+						borrow = int32_t(a >> 32);
 					}
-					carry -= cy;
+					carry += borrow;
 				}
 			}
 			bit >>= 1;
@@ -233,17 +231,16 @@ void fermat_test(const uint *M_in, const uint *Mi_in, const uint *R_in, uint *is
 
 			if (cy != 0)
 			{
-				cy = 0;
+				int32_t borrow = 0;
 				uint last_shifted = 0;
 				for (int i = 0; i < N_Size; ++i)
 				{
-					uint a = R[i];
+					int64_t a = R[i];
 					uint b = (M[i] << shift) | last_shifted;
 					last_shifted = M[i] >> (32 - shift);
-					b += cy;
-					cy = (b < cy);
-					cy += (a < b);
-					R[i] = a - b;
+					a = a - int64_t(b) + borrow;
+					R[i] = uint(a);
+					borrow = int32_t(a >> 32);
 				}
 			}
 		}
